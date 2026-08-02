@@ -22,7 +22,7 @@ support-crm/
 │ │ ├── Ticket.js ticket schema (notes embedded as subdocuments)
 │ │ └── Counter.js atomic counter that generates TKT-001, TKT-002, ...
 │ ├── routes/
-│ │ └── tickets.js the 4 REST endpoints
+│ │ └── tickets.js the 4 required REST endpoints + AI suggest-reply
 │ └── server.js app entry point
 └── frontend/ React (Vite) + Tailwind
 └── src/
@@ -44,6 +44,22 @@ from a one-document `counters` collection using an atomic
 `SERIAL`), so this is the standard pattern for it — it stays correct even
 if two tickets are created at the same instant.
 
+## Extra feature: AI-drafted reply suggestions
+
+Beyond the 5 required features, each ticket has a **"✨ Suggest reply"**
+button that calls **Groq** (running Llama 3.3 70B) with the ticket's
+subject, description, and existing notes, and drafts a suggested customer
+reply. The draft lands in the note textarea for the agent to review, edit,
+or discard — it is never saved or sent automatically, so a human always
+makes the final call.
+
+To enable it, set `GROQ_API_KEY` in the backend's environment (get a free
+key at https://console.groq.com/keys). Without it, the button returns a
+clear error instead of failing silently — the rest of the app works
+normally either way.
+
+New endpoint: `POST /api/tickets/:ticket_id/suggest-reply` → `{ suggestion }`
+
 ## API
 
 | Method | Route                  | Purpose                                |
@@ -52,6 +68,7 @@ if two tickets are created at the same instant.
 | GET    | `/api/tickets`           | List tickets (`?status=`, `?search=`)  |
 | GET    | `/api/tickets/:ticket_id`| Full detail for one ticket             |
 | PUT    | `/api/tickets/:ticket_id`| Update status and/or add a note        |
+| POST   | `/api/tickets/:ticket_id/suggest-reply` | AI-drafted reply suggestion (Groq) |
 
 ## Running locally
 
@@ -62,7 +79,7 @@ fine — takes about 5 minutes to set up).
 **Backend**
 ```bash
 cd backend
-cp .env.example .env      # fill in MONGO_URI
+cp .env.example .env      # fill in MONGO_URI, optionally GROQ_API_KEY
 npm install
 npm run dev                # http://localhost:5000
 ```
@@ -90,6 +107,7 @@ This app is deployed as: **Render** (backend) + **Vercel** (frontend) +
    - `MONGO_URI` — MongoDB Atlas connection string
    - `CLIENT_ORIGIN` — the deployed frontend URL (`https://support-crm-two.vercel.app`),
      used for CORS
+   - `GROQ_API_KEY` — enables the AI suggest-reply feature (optional)
 
 **Frontend → Vercel**
 1. New Project → connect this repo → root directory `frontend`.
