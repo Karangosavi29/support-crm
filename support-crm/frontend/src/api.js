@@ -32,4 +32,9 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     }).then(handle),
+
+  suggestReply: (ticketId) =>
+    fetch(`${BASE_URL}/api/tickets/${ticketId}/suggest-reply`, {
+      method: "POST",
+    }).then(handle),
 };

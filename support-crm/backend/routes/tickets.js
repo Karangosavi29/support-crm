@@ -10,7 +10,8 @@ router.post("/", async (req, res) => {
 
     if (!customer_name || !customer_email || !subject || !description) {
       return res.status(400).json({
-        error: "customer_name, customer_email, subject and description are all required",
+        error:
+          "customer_name, customer_email, subject and description are all required",
       });
     }
 
@@ -32,7 +33,6 @@ router.post("/", async (req, res) => {
     res.status(500).json({ error: "Failed to create ticket" });
   }
 });
-
 
 router.get("/", async (req, res) => {
   try {
@@ -65,7 +65,6 @@ router.get("/", async (req, res) => {
   }
 });
 
-
 router.get("/:ticket_id", async (req, res) => {
   try {
     const ticket = await Ticket.findOne({ ticket_id: req.params.ticket_id });
@@ -76,7 +75,6 @@ router.get("/:ticket_id", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch ticket" });
   }
 });
-
 
 router.put("/:ticket_id", async (req, res) => {
   try {
@@ -101,6 +99,65 @@ router.put("/:ticket_id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update ticket" });
+  }
+});
+
+router.post("/:ticket_id/suggest-reply", async (req, res) => {
+  try {
+    if (!process.env.GROQ_API_KEY) {
+      return res.status(503).json({
+        error: "AI reply suggestions aren't configured (missing GROQ_API_KEY)",
+      });
+    }
+
+    const ticket = await Ticket.findOne({ ticket_id: req.params.ticket_id });
+    if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+
+    const notesContext = ticket.notes.length
+      ? `\n\nInternal notes so far:\n${ticket.notes.map((n) => `- ${n.note_text}`).join("\n")}`
+      : "";
+
+    const prompt = `You are a helpful customer support agent. Draft a short, empathetic reply to this customer.
+
+Customer: ${ticket.customer_name}
+Subject: ${ticket.subject}
+Description: ${ticket.description}${notesContext}
+
+Write only the reply text (no subject line, no signature placeholder). Keep it concise, friendly and specific to their issue.`;
+
+    const response = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          max_tokens: 300,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      console.error("Groq API error:", errBody);
+      return res.status(502).json({ error: "AI reply generation failed" });
+    }
+
+    const data = await response.json();
+    const suggestion = data.choices?.[0]?.message?.content?.trim();
+
+    if (!suggestion) {
+      return res.status(502).json({ error: "AI returned an empty suggestion" });
+    }
+
+    res.json({ suggestion });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to generate reply suggestion" });
   }
 });
 

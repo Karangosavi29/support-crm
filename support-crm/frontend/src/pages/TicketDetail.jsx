@@ -12,6 +12,8 @@ export default function TicketDetail() {
   const [noteText, setNoteText] = useState("");
   const [savingStatus, setSavingStatus] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState(null);
 
   function load() {
     api.getTicket(ticketId).then(setTicket).catch((e) => setError(e.message));
@@ -43,6 +45,19 @@ export default function TicketDetail() {
       setError(e.message);
     } finally {
       setSavingNote(false);
+    }
+  }
+
+  async function suggestReply() {
+    setSuggesting(true);
+    setSuggestError(null);
+    try {
+      const { suggestion } = await api.suggestReply(ticketId);
+      setNoteText(suggestion);
+    } catch (e) {
+      setSuggestError(e.message);
+    } finally {
+      setSuggesting(false);
     }
   }
 
@@ -105,15 +120,31 @@ export default function TicketDetail() {
       </div>
 
       <div>
-        <p className="text-sm text-ink/50 mb-2">
-          Notes {ticket.notes?.length ? `(${ticket.notes.length})` : ""}
-        </p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm text-ink/50">
+            Notes {ticket.notes?.length ? `(${ticket.notes.length})` : ""}
+          </p>
+          <button
+            type="button"
+            onClick={suggestReply}
+            disabled={suggesting}
+            className="text-xs font-medium px-2.5 py-1 rounded-md border border-ink/15 hover:border-ink/40 disabled:opacity-50 transition-colors flex items-center gap-1"
+          >
+            {suggesting ? "Drafting…" : "✨ Suggest reply"}
+          </button>
+        </div>
+
+        {suggestError && (
+          <p className="text-xs text-signal-open bg-signal-open/10 border border-signal-open/30 rounded-md px-3 py-2 mb-3">
+            {suggestError}
+          </p>
+        )}
 
         <div className="flex flex-col gap-2 mb-3">
           {ticket.notes?.length ? (
             [...ticket.notes].reverse().map((n) => (
               <div key={n._id} className="bg-white/60 border border-ink/10 rounded-md px-3.5 py-2.5">
-                <p className="text-sm">{n.note_text}</p>
+                <p className="text-sm whitespace-pre-wrap">{n.note_text}</p>
                 <p className="text-xs font-mono text-ink/40 mt-1">
                   {new Date(n.created_at).toLocaleString()}
                 </p>
@@ -124,20 +155,20 @@ export default function TicketDetail() {
           )}
         </div>
 
-        <form onSubmit={addNote} className="flex gap-2">
-          <input
-            type="text"
+        <form onSubmit={addNote} className="flex flex-col gap-2">
+          <textarea
+            rows={noteText.length > 80 ? 4 : 1}
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
-            placeholder="Add an internal note…"
-            className="flex-1 px-3.5 py-2 rounded-md border border-ink/15 bg-white/70 focus:bg-white outline-none focus:ring-2 focus:ring-ink/20 transition"
+            placeholder="Add an internal note, or click Suggest reply for an AI draft…"
+            className="px-3.5 py-2 rounded-md border border-ink/15 bg-white/70 focus:bg-white outline-none focus:ring-2 focus:ring-ink/20 transition resize-y"
           />
           <button
             type="submit"
             disabled={savingNote}
-            className="px-4 py-2 rounded-md bg-ink text-paper text-sm font-medium hover:bg-ink/90 disabled:opacity-50 transition-colors"
+            className="self-end px-4 py-2 rounded-md bg-ink text-paper text-sm font-medium hover:bg-ink/90 disabled:opacity-50 transition-colors"
           >
-            Add
+            Add note
           </button>
         </form>
       </div>
