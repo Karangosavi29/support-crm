@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-paper text-ink font-sans antialiased;
+}
+
+.stub-edge {
+  background-image: radial-gradient(circle, #EEF0EE 1.5px, transparent 1.6px);
+  background-size: 8px 10px;
+  background-position: center;
+}
