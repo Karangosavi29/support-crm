@@ -1,134 +1,369 @@
-
 # Support Desk — Customer Support Ticketing CRM
 
-A small full-stack ticketing system: create tickets, search/filter them, and
-work them through Open → In Progress → Closed with internal notes attached.
+A lightweight full-stack customer support ticketing system built with the MERN stack. It allows agents to create tickets, search and filter them, manage ticket workflows, and maintain internal notes.
 
-Stack: **MongoDB + Express + React + Node (MERN)**, styled with Tailwind CSS.
+**Stack:** MongoDB · Express.js · React · Node.js · Tailwind CSS
 
-## Live
+---
 
-- **App**: https://support-crm-two.vercel.app
-- **API**: https://support-crm-nbll.onrender.com
+## Live Demo
 
-The backend is on Render's free tier, which spins down after periods of
-inactivity — the first request after a while may take 30–50 seconds to
-wake it up. Subsequent requests are fast.
+* **Frontend:** https://support-crm-two.vercel.app
+* **Backend API:** https://support-crm-nbll.onrender.com
 
-## Architecture
+> The backend runs on Render's free tier and may sleep after inactivity. The first request after a period of inactivity can take around 30–50 seconds while the service wakes up. Later requests respond normally.
+
+---
+
+# Features
+
+✅ Create support tickets
+✅ Search tickets by keyword
+✅ Filter tickets by status
+✅ Move tickets through workflow states:
+
+* Open
+* In Progress
+* Closed
+
+✅ Add internal notes to tickets
+✅ Generate AI-assisted customer reply drafts using Groq + Llama 3.3 70B
+
+---
+
+# Architecture
+
+```
 support-crm/
-├── backend/ Express API + Mongoose models
-│ ├── models/
-│ │ ├── Ticket.js ticket schema (notes embedded as subdocuments)
-│ │ └── Counter.js atomic counter that generates TKT-001, TKT-002, ...
-│ ├── routes/
-│ │ └── tickets.js the 4 required REST endpoints + AI suggest-reply
-│ └── server.js app entry point
-└── frontend/ React (Vite) + Tailwind
-└── src/
-├── api.js fetch wrapper for the backend
-├── pages/ Home, NewTicket, TicketDetail
-└── components/ TicketRow, StatusTag, SearchFilterBar
+│
+├── backend/                 Express API + Mongoose
+│   ├── models/
+│   │   ├── Ticket.js        Ticket schema with embedded notes
+│   │   └── Counter.js       Atomic ticket ID generator
+│   │
+│   ├── routes/
+│   │   └── tickets.js       Ticket APIs + AI reply endpoint
+│   │
+│   └── server.js            Application entry point
+│
+└── frontend/                React + Vite + Tailwind
+    │
+    └── src/
+        ├── api.js
+        ├── pages/
+        │   ├── Home
+        │   ├── NewTicket
+        │   └── TicketDetail
+        │
+        └── components/
+            ├── TicketRow
+            ├── StatusTag
+            └── SearchFilterBar
+```
 
+---
 
-**Design decision — notes as embedded subdocuments, not a separate
-collection.** The spec's "notes table" makes sense for a relational DB with
-a foreign key. In MongoDB, data that's always read and written together
-with its parent (a ticket's notes are only ever shown on that ticket's page)
-is idiomatically embedded as an array field on the ticket document instead.
-This avoids an extra round-trip on every ticket detail view.
+# Design Decisions
 
-**Design decision — ticket IDs.** `TKT-001`, `TKT-002`, ... are generated
-from a one-document `counters` collection using an atomic
-`findOneAndUpdate($inc)`. MongoDB has no built-in auto-increment (unlike SQL
-`SERIAL`), so this is the standard pattern for it — it stays correct even
-if two tickets are created at the same instant.
+## Embedded Notes in MongoDB
 
-## Extra feature: AI-drafted reply suggestions
+The specification describes notes like a relational database table, but MongoDB allows a more natural document model.
 
-Beyond the 5 required features, each ticket has a **"✨ Suggest reply"**
-button that calls **Groq** (running Llama 3.3 70B) with the ticket's
-subject, description, and existing notes, and drafts a suggested customer
-reply. The draft lands in the note textarea for the agent to review, edit,
-or discard — it is never saved or sent automatically, so a human always
-makes the final call.
+Notes are stored as embedded subdocuments inside the ticket:
 
-To enable it, set `GROQ_API_KEY` in the backend's environment (get a free
-key at https://console.groq.com/keys). Without it, the button returns a
-clear error instead of failing silently — the rest of the app works
-normally either way.
+```js
+{
+  ticket_id: "TKT-001",
+  subject: "Login issue",
+  notes: [
+    {
+      body: "Customer contacted support",
+      createdAt: "..."
+    }
+  ]
+}
+```
 
-New endpoint: `POST /api/tickets/:ticket_id/suggest-reply` → `{ suggestion }`
+Since notes are only accessed together with their parent ticket, embedding them:
 
-## API
+* avoids additional database queries
+* keeps ticket details in a single document
+* matches MongoDB document modeling practices
 
-| Method | Route                  | Purpose                                |
-|--------|-------------------------|-----------------------------------------|
-| POST   | `/api/tickets`           | Create a ticket                        |
-| GET    | `/api/tickets`           | List tickets (`?status=`, `?search=`)  |
-| GET    | `/api/tickets/:ticket_id`| Full detail for one ticket             |
-| PUT    | `/api/tickets/:ticket_id`| Update status and/or add a note        |
-| POST   | `/api/tickets/:ticket_id/suggest-reply` | AI-drafted reply suggestion (Groq) |
+---
 
-## Running locally
+## Ticket ID Generation
 
-You'll need Node 18+ and a MongoDB connection string (a free
-[MongoDB Atlas](https://www.mongodb.com/cloud/atlas/register) cluster works
-fine — takes about 5 minutes to set up).
+Tickets use human-friendly IDs:
 
-**Backend**
+```
+TKT-001
+TKT-002
+TKT-003
+```
+
+MongoDB does not provide SQL-style auto-increment IDs, so the application uses a dedicated `counters` collection with an atomic increment:
+
+```js
+findOneAndUpdate(
+  {},
+  { $inc: { sequence: 1 } }
+)
+```
+
+This keeps ID generation safe even when multiple tickets are created simultaneously.
+
+---
+
+# AI Reply Suggestions
+
+Each ticket includes a **✨ Suggest Reply** button.
+
+When clicked, the backend sends:
+
+* ticket subject
+* ticket description
+* existing internal notes
+
+to Groq running **Llama 3.3 70B**, which returns a suggested customer response.
+
+The generated response:
+
+* appears in the note editor
+* can be reviewed and modified by the agent
+* is never automatically saved or sent
+
+A human always approves the final message.
+
+## Configuration
+
+Add this environment variable:
+
+```
+GROQ_API_KEY=your_key_here
+```
+
+Get a free key from:
+
+https://console.groq.com/keys
+
+Without the key, the application continues working normally and returns a clear error when AI suggestions are requested.
+
+---
+
+# API Endpoints
+
+| Method | Endpoint                                | Description                  |
+| ------ | --------------------------------------- | ---------------------------- |
+| POST   | `/api/tickets`                          | Create a ticket              |
+| GET    | `/api/tickets`                          | List tickets                 |
+| GET    | `/api/tickets/:ticket_id`               | Get ticket details           |
+| PUT    | `/api/tickets/:ticket_id`               | Update status or add notes   |
+| POST   | `/api/tickets/:ticket_id/suggest-reply` | Generate AI reply suggestion |
+
+### Query Parameters
+
+Ticket listing supports:
+
+```
+GET /api/tickets?status=Open
+GET /api/tickets?search=password
+```
+
+---
+
+# Running Locally
+
+## Requirements
+
+* Node.js 18+
+* MongoDB database connection
+
+A free MongoDB Atlas cluster works well for development.
+
+---
+
+## Backend
+
 ```bash
 cd backend
-cp .env.example .env      # fill in MONGO_URI, optionally GROQ_API_KEY
-npm install
-npm run dev                # http://localhost:5000
+
+cp .env.example .env
 ```
 
-**Frontend** (in a second terminal)
+Configure:
+
+```
+MONGO_URI=your_mongodb_connection_string
+GROQ_API_KEY=optional_key
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run:
+
+```bash
+npm run dev
+```
+
+Backend:
+
+```
+http://localhost:5000
+```
+
+---
+
+## Frontend
+
+Open another terminal:
+
 ```bash
 cd frontend
-cp .env.example .env       # defaults to http://localhost:5000, fine for local dev
-npm install
-npm run dev                 # http://localhost:5173
+
+cp .env.example .env
 ```
 
-Open http://localhost:5173 — create a ticket, search for it, filter by
-status, open it and update its status or add a note.
+Default configuration:
 
-## Deployment
+```
+VITE_API_URL=http://localhost:5000
+```
 
-This app is deployed as: **Render** (backend) + **Vercel** (frontend) +
-**MongoDB Atlas** (database).
+Install:
 
-**Backend → Render.com** (free tier)
-1. New Web Service → connect this repo → root directory `backend`.
-2. Build command: `npm install`. Start command: `npm start`.
-3. Environment variables:
-   - `MONGO_URI` — MongoDB Atlas connection string
-   - `CLIENT_ORIGIN` — the deployed frontend URL (`https://support-crm-two.vercel.app`),
-     used for CORS
-   - `GROQ_API_KEY` — enables the AI suggest-reply feature (optional)
+```bash
+npm install
+```
 
-**Frontend → Vercel**
-1. New Project → connect this repo → root directory `frontend`.
-2. Framework preset: Vite (auto-detected).
-3. Environment variable:
-   - `VITE_API_URL` — the deployed backend URL (`https://support-crm-nbll.onrender.com`)
+Run:
 
-Vercel assigns multiple URLs per project (a stable production domain plus
-per-branch/per-deploy preview URLs). `CLIENT_ORIGIN` on the backend must
-match the **production** domain exactly, including scheme and no trailing
-slash, or the browser will block API calls with a CORS error.
+```bash
+npm run dev
+```
 
-**Database → MongoDB Atlas**
-Free M0 cluster, one database user (SCRAM password auth), Network Access
-set to allow `0.0.0.0/0` for simplicity in a take-home project.
+Frontend:
 
-## What's not here (by design, per the spec)
+```
+http://localhost:5173
+```
 
-- No authentication — out of scope for the MVP.
-- No pagination on the ticket list — fine at take-home scale; would add
-  cursor-based pagination before this went to real production traffic.
-- Search is a case-insensitive regex `$or` across fields rather than a
-  full-text index, since it needs to match substrings as the user types,
-  not just whole words.
+---
+
+# Deployment
+
+Deployment architecture:
+
+```
+Frontend  →  Vercel
+Backend   →  Render
+Database  →  MongoDB Atlas
+```
+
+---
+
+## Backend Deployment (Render)
+
+1. Create a new Web Service.
+2. Connect the repository.
+3. Set root directory:
+
+```
+backend
+```
+
+4. Configure:
+
+Build command:
+
+```bash
+npm install
+```
+
+Start command:
+
+```bash
+npm start
+```
+
+Environment variables:
+
+```
+MONGO_URI=your_atlas_connection_string
+
+CLIENT_ORIGIN=https://support-crm-two.vercel.app
+
+GROQ_API_KEY=optional_key
+```
+
+---
+
+## Frontend Deployment (Vercel)
+
+1. Create a new project.
+2. Select the repository.
+3. Set root directory:
+
+```
+frontend
+```
+
+4. Framework:
+
+```
+Vite
+```
+
+Environment variable:
+
+```
+VITE_API_URL=https://support-crm-nbll.onrender.com
+```
+
+---
+
+## MongoDB Atlas
+
+Recommended setup for this project:
+
+* Free M0 cluster
+* SCRAM authentication
+* Network access:
+
+```
+0.0.0.0/0
+```
+
+This is acceptable for a take-home project. Production systems should restrict network access.
+
+---
+
+# Scope Decisions
+
+The project intentionally does not include:
+
+## Authentication
+
+Not included because authentication was outside the MVP requirements.
+
+## Pagination
+
+The ticket list does not use pagination because the expected dataset size is small.
+
+For production scale, cursor-based pagination would be added.
+
+## Search Implementation
+
+Search uses MongoDB case-insensitive regex matching across ticket fields.
+
+A full-text index was not used because the requirement is substring matching while typing rather than exact word search.
+
+---
+
+# License
+
+Built as a take-home project demonstrating MERN development, MongoDB modeling, REST API design, and AI-assisted support workflows.
